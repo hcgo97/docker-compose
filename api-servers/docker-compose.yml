@@ -1,0 +1,52 @@
+version: '3.8'
+
+volumes:
+  mysql-data:
+    external: false
+  redis-data:
+    external: false
+
+services:
+  mysql:
+    container_name: local_mysql
+    image: mysql:8.0.34
+    platform: linux/amd64
+    ports:
+      - "3306:3306"
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      LANG: C.UTF-8
+      TZ: Asia/Seoul
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --sql_mode=''
+    restart: unless-stopped
+
+  redis:
+    container_name: local_redis
+    image: redis:6.2.6-alpine3.15
+    ports:
+      - "6379:6379"
+    env_file: .env
+    volumes:
+      - redis-data:/data
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+
+  api:
+    container_name: local_api
+    depends_on:
+      - mysql
+      - redis
+    restart: always
+    ports:
+      - "8080:8080"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SPRING_PROFILE: ${SPRING_PROFILE}
+    env_file: .env
+    restart: unless-stopped
