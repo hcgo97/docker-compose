@@ -1,0 +1,138 @@
+version: '3.8'
+
+volumes:
+  mysql-data:
+    external: false
+  mariadb-data:
+    external: false
+  postgres-data:
+    external: false
+  redis-data:
+    external: false
+  zookeeper-data:
+    external: false
+  kafka-data:
+    external: false
+  nginx-data:
+    external: false
+
+networks:
+  kafka-net:
+    driver: bridge
+
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:8.0.34
+    platform: linux/amd64
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: yourpassword
+      LANG: C.UTF-8
+      TZ: Asia/Seoul
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --sql_mode=''
+    restart: unless-stopped
+
+  mariadb:
+    container_name: local_mariadb
+    image: mariadb:10.6.14
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: yourpassword
+      LANG: C.UTF-8
+      TZ: Asia/Seoul
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    command: --sql_mode=''
+    restart: unless-stopped
+
+  postgres:
+    container_name: postgres
+    image: postgres:15.3-alpine
+    platform: linux/amd64
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourpassword
+      LANG: C.UTF-8
+      TZ: Asia/Seoul
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    container_name: local_redis
+    image: redis:6.2.6-alpine3.15
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --requirepass yourpassword
+    restart: unless-stopped
+
+  zookeeper:
+    container_name: local_zookeeper
+    image: zookeeper:3.9.0
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-net
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    volumes:
+      - zookeeper-data:/data
+    restart: unless-stopped
+
+  kafka:
+    container_name: local_kafka
+    image: bitnami/kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-net
+    hostname: local_kafka
+    environment:
+      # KRaft settings
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      # Listeners
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "8989:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local_kafka
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=local_kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=local_zookeeper:2181
+    restart: unless-stopped
+
+  nginx:
+    container_name: nginx
+    image: nginx:1.25.2-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - nginx-data:/etc/nginx/nginx.conf
+    restart: unless-stopped
